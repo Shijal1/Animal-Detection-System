@@ -1,0 +1,308 @@
+<!-- HTML structure for the Image Prediction application -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animal Image Classifier</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(120deg, #a1c4fd 0%, #c2e9fb 100%);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: rgba(255,255,255,0.85);
+            padding: 40px 30px 30px 30px;
+            border-radius: 30px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.18);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.18);
+            position: relative;
+        }
+        h1 {
+            color: #2563eb;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.8rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 8px rgba(38, 60, 135, 0.12);
+        }
+        .upload-section {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-btn {
+            background: linear-gradient(90deg, #43e97b 0%, #38f9d7 100%);
+            color: #fff;
+            padding: 16px 32px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border: none;
+            box-shadow: 0 2px 8px rgba(38, 60, 135, 0.10);
+            transition: background 0.3s, transform 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .upload-btn:hover {
+            background: linear-gradient(90deg, #38f9d7 0%, #43e97b 100%);
+            transform: scale(1.05);
+        }
+        .upload-btn i {
+            font-size: 1.3rem;
+        }
+        #imagePreviewContainer {
+            width: 100%;
+            max-width: 420px;
+            height: 320px;
+            margin: 24px auto;
+            border: 2px solid #38f9d7;
+            border-radius: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: rgba(56,249,215,0.07);
+            box-shadow: 0 2px 12px rgba(38, 60, 135, 0.08);
+            position: relative;
+        }
+        #imagePreview {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(38, 60, 135, 0.10);
+            transition: box-shadow 0.3s;
+        }
+        #imagePreview[style*="display: block"] {
+            animation: fadeIn 0.7s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        #output {
+            text-align: left;
+            padding: 28px 24px;
+            background: rgba(226,232,240,0.7);
+            border-radius: 18px;
+            margin-top: 28px;
+            font-size: 1.15rem;
+            box-shadow: 0 2px 8px rgba(38, 60, 135, 0.07);
+            min-height: 120px;
+            transition: background 0.3s;
+        }
+        #output strong {
+            color: #2563eb;
+            font-size: 1.2rem;
+        }
+        #output img {
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(38, 60, 135, 0.10);
+            margin-top: 10px;
+        }
+        #output a {
+            color: #38f9d7;
+            text-decoration: underline;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        #output a:hover {
+            color: #2563eb;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .loading-spinner {
+            border: 5px solid #e2e8f0;
+            border-top: 5px solid #38f9d7;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Responsive */
+        @media (max-width: 600px) {
+            .container {
+                padding: 16px 6px;
+            }
+            #imagePreviewContainer {
+                max-width: 98vw;
+                height: 180px;
+            }
+            #output {
+                padding: 12px 6px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Animal Image Classifier</h1>
+        <div class="upload-section">
+            <label class="upload-btn">
+                Choose an Image
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+            </label>
+        </div>
+        <div id="imagePreviewContainer">
+            <img id="imagePreview" style="display: none;">
+        </div>
+        <div class="loading">
+            <div class="loading-spinner"></div>
+            <p>Analyzing image...</p>
+        </div>
+        <div id="output">
+            Upload an image to identify the animal
+        </div>
+    </div>
+
+    <script>
+        let model;
+        const imageUpload = document.getElementById('imageUpload');
+        const imagePreview = document.getElementById('imagePreview');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const output = document.getElementById('output');
+        const loading = document.querySelector('.loading');
+
+        // === API Key for external animal info API ===
+        // Replace with your actual API key if required by the API you use
+        const API_KEY = 'YOUR_API_KEY_HERE';
+
+        // Load the MobileNet model
+        async function loadModel() {
+            try {
+                model = await mobilenet.load();
+                console.log('Model loaded successfully');
+            } catch (error) {
+                console.error('Error loading model:', error);
+                output.textContent = 'Error loading the model. Please refresh the page.';
+            }
+        }
+
+        // Handle image upload
+        imageUpload.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            // Display the image
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imagePreview.src = e.target.result;
+                imagePreview.style.display = 'block';
+                classifyImage(e.target.result);
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Fetch animal details from Wikipedia API (or similar)
+        async function fetchAnimalDetails(animalName) {
+            // Wikipedia API endpoint
+            const endpoint = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(animalName)}`;
+            try {
+                const response = await fetch(endpoint, {
+                    headers: {
+                        // Example for API key usage if needed:
+                        // 'Authorization': `Bearer ${API_KEY}`
+                    }
+                });
+                if (!response.ok) throw new Error('No info found');
+                const data = await response.json();
+                return {
+                    description: data.extract || 'No description available.',
+                    image: data.thumbnail ? data.thumbnail.source : null,
+                    wikipediaUrl: data.content_urls ? data.content_urls.desktop.page : null
+                };
+            } catch (error) {
+                return {
+                    description: 'No additional information found.',
+                    image: null,
+                    wikipediaUrl: null
+                };
+            }
+        }
+
+        // Simple harmfulness database (expand as needed)
+        const harmfulnessDB = {
+            'lion': 'Potentially dangerous to humans due to size and predatory nature.',
+            'tiger': 'Highly dangerous to humans.',
+            'rabbit': 'Harmless to humans.',
+            'panda': 'Generally harmless, but can be dangerous if provoked.',
+            'fox': 'Generally not dangerous, but can carry rabies.',
+            'crab': 'Mostly harmless, but some species can pinch.',
+            'frog': 'Most are harmless, but some can be poisonous.',
+            'lizard': 'Mostly harmless, but some species can bite or be venomous.',
+            'monkey': 'Can be dangerous if threatened or provoked.',
+            'yak': 'Generally harmless, but large and strong.',
+            'zebra': 'Generally harmless, but can kick if threatened.',
+            'hummingbird': 'Harmless to humans.',
+            'peacock': 'Harmless to humans.',
+            'squirrel': 'Harmless, but can bite if handled.',
+            'tortoise': 'Harmless to humans.',
+            'jellyfish': 'Some species can be very dangerous to humans.',
+            // ...add more as needed
+        };
+
+        // Classify the image and fetch more info
+        async function classifyImage(imageUrl) {
+            try {
+                loading.style.display = 'block';
+                output.textContent = 'Analyzing image...';
+
+                const img = new Image();
+                img.src = imageUrl;
+                await new Promise((resolve) => {
+                    img.onload = resolve;
+                });
+
+                const predictions = await model.classify(img);
+                const topPrediction = predictions[0];
+                const animalName = topPrediction.className.split(',')[0]; // Use first name for lookup
+
+                // Fetch animal details
+                const details = await fetchAnimalDetails(animalName);
+
+                // Harmfulness info
+                let harmfulness = harmfulnessDB[animalName.toLowerCase()] || 'No harmfulness data available.';
+
+                // Build output HTML
+                let html = `<strong>This appears to be a <span style="color:#3182ce">${topPrediction.className}</span> (${(topPrediction.probability * 100).toFixed(2)}% confidence)</strong><br><br>`;
+                html += `<strong>Description:</strong> ${details.description}<br>`;
+                html += `<strong>Harmfulness to humans:</strong> ${harmfulness}<br>`;
+                if (details.wikipediaUrl) {
+                    html += `<a href="${details.wikipediaUrl}" target="_blank">Read more on Wikipedia</a><br>`;
+                }
+                if (details.image) {
+                    html += `<img src="${details.image}" alt="${animalName}" style="max-width:200px;display:block;margin:10px auto;">`;
+                }
+                output.innerHTML = html;
+            } catch (error) {
+                console.error('Error classifying image:', error);
+                output.textContent = 'Error analyzing the image. Please try again.';
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        // Load the model when the page loads
+        loadModel();
+    </script>
+</body>
+</html>
